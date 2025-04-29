@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Jeu 2D Multijoueur</title>
+  <style>
+    /* Stats bars */
+    #statsPanel {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      color: black;
+      font-family: sans-serif;
+      margin-bottom: 8px;
+    }
+    .stat-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+    }
+    .stat-bar-bg {
+      width: 100px;
+      height: 10px;
+      background: #444;
+      position: relative;
+    }
+    .stat-bar {
+      height: 100%;
+      width: 0%;
+    }
+    .hp-bar { background: #e22; }
+    .mana-bar { background: #22e; }
+    .xp-bar { background: #ee2; }
+    body { margin: 0; overflow: hidden; }
+    /* Wrapper pour aligner canvas et UI en colonne, responsive */
+    #gameWrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    /* Canvas responsive */
+    canvas {
+      width: 100%;
+      height: auto;
+      background-color: #222;
+      image-rendering: optimizeSpeed;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -o-crisp-edges;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: pixelated;
+      cursor: pointer;
+    }
+    /* Conteneur UI sous le canvas */
+    #uiBlock {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      color:black;
+    }
+    /* Inventory bar sans position absolute */
+    #inventoryBar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: center;
+    }
+    .inventory-slot {
+      width: 32px;
+      height: 32px;
+      border: 1px solid #ccc;
+      background-color: #333;
+      position: relative;
+    }
+    /* Item icon and quantity overlay */
+    .inventory-slot .item-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      cursor: grab;
+      user-select: none;
+    }
+    .inventory-slot .item-qty {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      font-size: 10px;
+      padding: 0 2px;
+      border-radius: 2px;
+      pointer-events: none;
+    }
+    /* Spell bar UI sans position absolute */
+    #spellBar {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .spell-slot {
+      width: 50px;
+      height: 50px;
+      border: 2px solid white;
+      background-color: rgba(0,0,0,0.5);
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      cursor: pointer;
+      position: relative;
+    }
+    .spell-slot.selected {
+      outline: 2px solid yellow;
+    }
+    .spell-slot[data-spell="1"] {
+      background-image: url('./assets/sprites/spells/spell1.png');
+    }
+    .spell-slot[data-spell="2"] {
+      background-image: url('./assets/sprites/spells/spell2.png');
+    }
+    .cooldown-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      transform-origin: top;
+    }
+    @keyframes cooldown {
+      from { transform: scaleY(1); }
+      to { transform: scaleY(0); }
+    }
+    /* Tooltip */
+    #tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      display: none;
+      z-index: 200;
+      white-space: nowrap;
+    }
+    /* Audio controls */
+    #audioControls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 200;
+    }
+    #audioControls button {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    #audioControls input[type="range"] {
+      width: 100px;
+    }
+    /* Fade overlay for map transitions */
+    #fade {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: black;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      z-index: 250;
+    }
+    #fade.active {
+      opacity: 1;
+    }
+    /* Name entry modal */
+    #nameModal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+    }
+    #nameModal.active {
+      display: flex;
+    }
+    #nameModal .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    /* Settings and GameOver modals */
+    #settingsModal, #gameOverModal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+    }
+    #settingsModal.active, #gameOverModal.active {
+      display: flex;
+    }
+    #settingsModal .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    #nameModal input {
+      width: 200px;
+      padding: 8px;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    #nameModal button {
+      margin-top: 12px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="gameWrapper">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="uiBlock">
+      <!-- Stats Panel -->
+      <div id="statsPanel">
+        <div class="stat-line">HP
+          <div class="stat-bar-bg"><div id="hpBar" class="stat-bar hp-bar"></div></div>
+          <span id="hpText">100/100</span>
+        </div>
+        <div class="stat-line">Mana
+          <div class="stat-bar-bg"><div id="manaBar" class="stat-bar mana-bar"></div></div>
+          <span id="manaText">50/50</span>
+        </div>
+        <div class="stat-line">Level <span id="levelText">1</span> XP: <span id="xpText">0/0</span>
+          <div class="stat-bar-bg"><div id="xpBar" class="stat-bar xp-bar"></div></div>
+        </div>
+      </div>
+      <!-- Inventory UI -->
+      <div id="inventoryBar">
+        <div class="inventory-slot" data-slot="0"></div>
+        <div class="inventory-slot" data-slot="1"></div>
+        <div class="inventory-slot" data-slot="2"></div>
+        <div class="inventory-slot" data-slot="3"></div>
+        <div class="inventory-slot" data-slot="4"></div>
+        <div class="inventory-slot" data-slot="5"></div>
+        <div class="inventory-slot" data-slot="6"></div>
+        <div class="inventory-slot" data-slot="7"></div>
+        <div class="inventory-slot" data-slot="8"></div>
+        <div class="inventory-slot" data-slot="9"></div>
+        <div class="inventory-slot" data-slot="10"></div>
+        <div class="inventory-slot" data-slot="11"></div>
+        <div class="inventory-slot" data-slot="12"></div>
+        <div class="inventory-slot" data-slot="13"></div>
+        <div class="inventory-slot" data-slot="14"></div>
+        <div class="inventory-slot" data-slot="15"></div>
+        <div class="inventory-slot" data-slot="16"></div>
+        <div class="inventory-slot" data-slot="17"></div>
+        <div class="inventory-slot" data-slot="18"></div>
+        <div class="inventory-slot" data-slot="19"></div>
+      </div>
+      <!-- Spell selection bar -->
+      <div id="spellBar">
+        <div class="spell-slot" data-spell="1"></div>
+        <div class="spell-slot" data-spell="2"></div>
+        <div class="spell-slot" data-spell="3"></div>
+        <div class="spell-slot" data-spell="4"></div>
+      </div>
+    </div>
+  </div>
+  <!-- Settings button -->
+  <div id="audioControls">
+    <button id="settingsButton">⚙️</button>
+  </div>
+  <!-- Name entry modal -->
+  <div id="nameModal">
+    <div class="modal-content">
+      <h2>Entrez votre pseudo</h2>
+      <input id="nameInput" type="text" placeholder="Votre pseudo" />
+      <br />
+      <button id="nameSubmit">Valider</button>
+    </div>
+  </div>
+  <!-- Settings modal -->
+  <div id="settingsModal">
+    <div class="modal-content">
+      <h2>Settings</h2>
+      <div id="settingsAudioControls" style="display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:16px;">
+        <button id="settingsMuteButton">🔊</button>
+        <input type="range" id="settingsVolumeSlider" min="0" max="1" step="0.01" />
+      </div>
+      <button id="replayButton">Replay</button>
+      <button id="quitButton">Quitter</button>
+      <button id="settingsCloseButton">Retour</button>
+    </div>
+  </div>
+  <!-- Game Over modal -->
+  <div id="gameOverModal">
+    <div class="modal-content">
+      <h2>Game Over</h2>
+      <button id="gameOverReplay">Rejouer</button>
+      <button id="gameOverQuit">Quitter</button>
+    </div>
+  </div>
+  <!-- Fade overlay for map transitions -->
+  <div id="fade"></div>
+  <!-- Socket.io client script -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Tooltip for inventory and drops -->
+  <div id="tooltip"></div>
+  <!-- Main client entry point -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
